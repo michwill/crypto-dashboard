@@ -3,3 +3,4 @@ pyqtgraph
 requests
 websocket-client
 numpy
+platformdirs

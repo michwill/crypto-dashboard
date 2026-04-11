@@ -7,6 +7,7 @@
 #     "requests",
 #     "websocket-client",
 #     "numpy",
+#     "platformdirs",
 # ]
 # ///
 """Real-time cryptocurrency dashboard with candlestick charts."""
@@ -18,6 +19,8 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+
+import platformdirs
 
 os.environ["QT_LOGGING_RULES"] = "qt.qpa.theme.gnome.warning=false"
 
@@ -51,7 +54,8 @@ COLORS = [
 CANDLE_LIMIT = 200
 WS_URL = "wss://stream.binance.com:9443/ws"
 REST_URL = "https://api.binance.com/api/v3"
-CONFIG_FILE = Path(__file__).resolve().parent / "coins.json"
+CONFIG_DIR = Path(platformdirs.user_config_dir("crypto-dashboard"))
+CONFIG_FILE = CONFIG_DIR / "coins.json"
 
 
 # ── Candlestick Graphics Item ──────────────────────────────────────────────
@@ -818,6 +822,7 @@ class Dashboard(QMainWindow):
         return list(DEFAULT_SYMBOLS)
 
     def _save_coins(self):
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         CONFIG_FILE.write_text(json.dumps(self.coins, indent=2))
 
 
