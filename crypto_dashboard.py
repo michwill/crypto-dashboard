@@ -19,6 +19,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from queue import Queue
 
 import platformdirs
 
@@ -28,8 +29,8 @@ import numpy as np
 import pyqtgraph as pg
 import requests
 import websocket
-from PyQt6.QtCore import QPointF, QRectF, QTimer, Qt, pyqtSignal, QObject
-from PyQt6.QtGui import QColor, QFont, QPainter, QPicture
+from PyQt6.QtCore import QPointF, QRectF, QSize, QTimer, Qt, pyqtSignal, QObject
+from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPicture, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QComboBox, QHBoxLayout, QHeaderView, QInputDialog,
     QLabel, QMainWindow, QMenu, QMessageBox, QPushButton, QSplitter,
@@ -56,6 +57,7 @@ WS_URL = "wss://stream.binance.com:9443/ws"
 REST_URL = "https://api.binance.com/api/v3"
 CONFIG_DIR = Path(platformdirs.user_config_dir("crypto-dashboard"))
 CONFIG_FILE = CONFIG_DIR / "coins.json"
+ICON_CACHE_DIR = Path(platformdirs.user_cache_dir("crypto-dashboard")) / "icons"
 
 
 # ── Candlestick Graphics Item ──────────────────────────────────────────────
@@ -140,6 +142,7 @@ class Signals(QObject):
     kline_update = pyqtSignal(str, dict)            # symbol, kline data
     candles_loaded = pyqtSignal(str, str, object)   # symbol, interval, np array
     coin_validated = pyqtSignal(str, bool, str)     # symbol, valid, error
+    icon_ready = pyqtSignal(str, str)               # symbol, file path
 
 
 # ── Binance WebSocket ───────────────────────────────────────────────────────
@@ -256,6 +259,53 @@ class BinanceWS(threading.Thread):
                 "c": float(k["c"]),
                 "closed": k["x"],
             })
+
+
+# ── Icon Fetcher ───────────────────────────────────────────────────────────
+
+class IconFetcher(threading.Thread):
+    """Downloads coin icons from CoinGecko and caches them locally."""
+
+    SEARCH_URL = "https://api.coingecko.com/api/v3/search"
+
+    def __init__(self, signals):
+        super().__init__(daemon=True)
+        self.signals = signals
+        self._queue = Queue()
+
+    def enqueue(self, symbol):
+        self._queue.put(symbol)
+
+    def run(self):
+        ICON_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        while True:
+            symbol = self._queue.get()
+            try:
+                self._fetch(symbol)
+            except Exception:
+                pass
+            time.sleep(0.5)
+
+    def _fetch(self, symbol):
+        path = ICON_CACHE_DIR / f"{symbol.lower()}.png"
+        if path.exists():
+            self.signals.icon_ready.emit(symbol, str(path))
+            return
+        resp = requests.get(
+            self.SEARCH_URL, params={"query": symbol}, timeout=10)
+        if resp.status_code != 200:
+            return
+        coins = resp.json().get("coins", [])
+        for coin in sorted(
+                coins, key=lambda c: c.get("market_cap_rank") or 9999):
+            if coin.get("symbol", "").upper() == symbol.upper():
+                img_url = coin.get("large") or coin.get("thumb")
+                if img_url:
+                    img_resp = requests.get(img_url, timeout=10)
+                    if img_resp.status_code == 200:
+                        path.write_bytes(img_resp.content)
+                        self.signals.icon_ready.emit(symbol, str(path))
+                return
 
 
 # ── REST Ticker Poller ──────────────────────────────────────────────────────
@@ -433,7 +483,8 @@ class Dashboard(QMainWindow):
         top.addSpacing(12)
 
         self.coin_selector = QComboBox()
-        self.coin_selector.setMinimumWidth(110)
+        self.coin_selector.setMinimumWidth(130)
+        self.coin_selector.setIconSize(QSize(20, 20))
         self.coin_selector.setStyleSheet(
             "QComboBox { background:#313244; color:#cdd6f4; padding:4px 8px;"
             " border-radius:4px; }"
@@ -499,6 +550,7 @@ class Dashboard(QMainWindow):
 
         # Table
         self.table = TickerTable()
+        self.table.setIconSize(QSize(20, 20))
         for i, sym in enumerate(self.coins):
             self.table.add_coin(sym, COLORS[i % len(COLORS)])
         self.table.cellDoubleClicked.connect(self._on_table_dbl_click)
@@ -521,6 +573,7 @@ class Dashboard(QMainWindow):
         self.signals.kline_update.connect(self._on_kline)
         self.signals.candles_loaded.connect(self._on_candles_loaded)
         self.signals.coin_validated.connect(self._on_coin_validated)
+        self.signals.icon_ready.connect(self._on_icon_ready)
 
         # Batch table refreshes at 2 Hz
         self._table_timer = QTimer(self)
@@ -548,6 +601,16 @@ class Dashboard(QMainWindow):
         self._ticker_poller = TickerPoller(
             self.signals, lambda: list(self.coins), interval=10)
         self._ticker_poller.start()
+
+        # Load cached icons immediately, fetch missing ones in background
+        self._icon_fetcher = IconFetcher(self.signals)
+        self._icon_fetcher.start()
+        for sym in self.coins:
+            path = ICON_CACHE_DIR / f"{sym.lower()}.png"
+            if path.exists():
+                self._on_icon_ready(sym, str(path))
+            else:
+                self._icon_fetcher.enqueue(sym)
 
         # Load initial chart
         self._switch_chart(self._active_coin, self._active_interval)
@@ -714,6 +777,7 @@ class Dashboard(QMainWindow):
         self.coin_selector.addItem(symbol)
         self._ws.subscribe([f"{symbol.lower()}usdt@miniTicker"])
         self._save_coins()
+        self._icon_fetcher.enqueue(symbol)
         self.status_label.setText(f"Added {symbol}")
         # Fetch ticker data immediately so the row doesn't stay empty
         threading.Thread(
@@ -736,6 +800,22 @@ class Dashboard(QMainWindow):
                 })
         except Exception:
             pass
+
+    # ── Icons ───────────────────────────────────────────────────────────────
+
+    def _on_icon_ready(self, symbol, path):
+        pixmap = QPixmap(path).scaled(
+            20, 20, Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation)
+        icon = QIcon(pixmap)
+        if symbol in self.table.symbols:
+            row = self.table.symbols.index(symbol)
+            item = self.table.item(row, 0)
+            if item:
+                item.setIcon(icon)
+        idx = self.coin_selector.findText(symbol)
+        if idx >= 0:
+            self.coin_selector.setItemIcon(idx, icon)
 
     def _remove_coin(self, symbol):
         if len(self.coins) <= 1:
