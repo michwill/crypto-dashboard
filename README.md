@@ -43,6 +43,14 @@ python -m venv .venv
 - **Remove a coin**: right-click a table row
 - **Zoom/pan**: scroll wheel and drag on the chart; right-click > View All to reset
 
+## Desktop Shortcut (Linux)
+
+```sh
+./install-desktop.sh
+```
+
+This creates a `.desktop` entry so the app appears in your application launcher under **Finance**.
+
 ## Data Sources
 
 All data comes from Binance:

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e1e2e"/>
+      <stop offset="100%" stop-color="#313244"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="20" fill="url(#bg)"/>
+  <!-- Candlestick 1 (red/down) -->
+  <rect x="22" y="40" width="2" height="50" fill="#f38ba8"/>
+  <rect x="16" y="50" width="14" height="25" rx="2" fill="#f38ba8"/>
+  <!-- Candlestick 2 (green/up) -->
+  <rect x="44" y="30" width="2" height="55" fill="#a6e3a1"/>
+  <rect x="38" y="35" width="14" height="30" rx="2" fill="#a6e3a1"/>
+  <!-- Candlestick 3 (red/down) -->
+  <rect x="66" y="35" width="2" height="50" fill="#f38ba8"/>
+  <rect x="60" y="45" width="14" height="20" rx="2" fill="#f38ba8"/>
+  <!-- Candlestick 4 (green/up) -->
+  <rect x="88" y="20" width="2" height="60" fill="#a6e3a1"/>
+  <rect x="82" y="25" width="14" height="35" rx="2" fill="#a6e3a1"/>
+  <!-- Candlestick 5 (green/up) -->
+  <rect x="110" y="15" width="2" height="50" fill="#a6e3a1"/>
+  <rect x="104" y="20" width="14" height="25" rx="2" fill="#a6e3a1"/>
+  <!-- Bitcoin symbol -->
+  <text x="64" y="115" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="22" fill="#f9e2af">₿</text>
+</svg>
