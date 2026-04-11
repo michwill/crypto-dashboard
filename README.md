@@ -2,6 +2,8 @@
 
 Real-time cryptocurrency dashboard built with Python and Qt. Features candlestick charts, live price streaming from Binance, and a dynamic coin watchlist.
 
+![screenshot](screenshot.png)
+
 ## Features
 
 - **Candlestick charts** with OHLC data from Binance, updated in real time
