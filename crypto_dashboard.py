@@ -442,6 +442,7 @@ class Dashboard(QMainWindow):
         self._active_interval = "1h"
         self._ohlc = np.empty((0, 5))
         self._ticker_cache = {}          # symbol -> latest ticker dict
+        self._current_price = None
 
         self.signals = Signals()
         self._setup_ui()
@@ -546,6 +547,24 @@ class Dashboard(QMainWindow):
             slot=self._on_mouse_moved)
         self._mouse_proxy = proxy  # prevent GC
 
+        # Current price line & label
+        self._price_line = pg.InfiniteLine(
+            angle=0, movable=False,
+            pen=pg.mkPen("#89b4fa", width=1, style=Qt.PenStyle.DashLine))
+        self.chart.addItem(self._price_line, ignoreBounds=True)
+        self._price_line.hide()
+
+        self._price_label = pg.TextItem(
+            color="#1e1e2e", anchor=(0, 0.5),
+            fill=pg.mkBrush("#89b4fa"))
+        self._price_label.setFont(QFont("monospace", 9, QFont.Weight.Bold))
+        self._price_label.setZValue(100)
+        self.chart.addItem(self._price_label, ignoreBounds=True)
+        self._price_label.hide()
+
+        self.chart.plotItem.vb.sigRangeChanged.connect(
+            self._reposition_price_label)
+
         splitter.addWidget(self.chart)
 
         # Table
@@ -632,6 +651,11 @@ class Dashboard(QMainWindow):
         new_stream = f"{self._active_coin.lower()}usdt@kline_{self._active_interval}"
         self._ws.subscribe([new_stream])
 
+        # Hide price line until new data arrives
+        self._current_price = None
+        self._price_line.hide()
+        self._price_label.hide()
+
         # Fetch historical candles in background
         self._load_candles(self._active_coin, self._active_interval)
 
@@ -671,6 +695,8 @@ class Dashboard(QMainWindow):
         self._ohlc = data
         self._candle_item.set_data(data)
         self.chart.enableAutoRange()
+        if len(data) > 0:
+            self._update_price_line(float(data[-1, 4]))
 
     def _on_kline(self, symbol, kline):
         if symbol != self._active_coin:
@@ -686,6 +712,7 @@ class Dashboard(QMainWindow):
             if len(self._ohlc) > CANDLE_LIMIT:
                 self._ohlc = self._ohlc[1:]
         self._candle_item.set_data(self._ohlc)
+        self._update_price_line(float(kline["c"]))
 
     def _on_ticker(self, symbol, data):
         self._ticker_cache[symbol] = data
@@ -830,6 +857,29 @@ class Dashboard(QMainWindow):
         self._save_coins()
         if self._active_coin == symbol:
             self._switch_chart(symbol=self.coins[0])
+
+    # ── Current price line ──────────────────────────────────────────────────
+
+    def _update_price_line(self, price):
+        self._current_price = price
+        self._price_line.setPos(price)
+        self._price_line.show()
+        if price >= 1:
+            txt = f" ${price:,.2f} "
+        elif price >= 0.01:
+            txt = f" ${price:.4f} "
+        else:
+            txt = f" ${price:.8f} "
+        self._price_label.setText(txt)
+        self._price_label.show()
+        self._reposition_price_label()
+
+    def _reposition_price_label(self):
+        if self._current_price is None:
+            return
+        vr = self.chart.plotItem.vb.viewRange()
+        x_min = vr[0][0]
+        self._price_label.setPos(x_min, self._current_price)
 
     # ── Crosshair ───────────────────────────────────────────────────────────
 
