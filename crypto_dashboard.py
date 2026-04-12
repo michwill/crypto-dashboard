@@ -32,10 +32,16 @@ import websocket
 from PyQt6.QtCore import QPointF, QRectF, QSize, QTimer, Qt, pyqtSignal, QObject
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPicture, QPixmap
 from PyQt6.QtWidgets import (
-    QApplication, QComboBox, QHBoxLayout, QHeaderView, QInputDialog,
-    QLabel, QMainWindow, QMenu, QMessageBox, QPushButton, QSplitter,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QApplication, QComboBox, QGraphicsItem, QHBoxLayout, QHeaderView,
+    QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
+    QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
+
+# ── pyqtgraph global config ────────────────────────────────────────────────
+
+# GPU-accelerated rendering cuts CPU during crosshair hover by offloading
+# scene repaints (grid, axes, candles) to the GPU.
+pg.setConfigOptions(useOpenGL=True, antialias=False)
 
 # ── Configuration ───────────────────────────────────────────────────────────
 
@@ -69,6 +75,9 @@ class CandlestickItem(pg.GraphicsObject):
         super().__init__()
         self._data = np.empty((0, 5))   # Nx5: time, open, high, low, close
         self._picture = None
+        # Cache rendered output as a device pixmap so crosshair/hover updates
+        # blit instead of replaying the full QPicture.
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
     def set_data(self, data):
         """Set OHLC data as an Nx5 numpy array [time, open, high, low, close]."""
@@ -147,6 +156,7 @@ class VolumeItem(pg.GraphicsObject):
         super().__init__()
         self._data = np.empty((0, 6))  # same Nx6 OHLCV as Dashboard._ohlc
         self._picture = None
+        self.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
     def set_data(self, data):
         self._data = data if len(data) > 0 else np.empty((0, 6))
@@ -625,9 +635,11 @@ class Dashboard(QMainWindow):
         self._xhair_label.setFont(QFont("monospace", 9))
         self.chart.addItem(self._xhair_label, ignoreBounds=True)
         proxy = pg.SignalProxy(
-            self.chart.scene().sigMouseMoved, rateLimit=30,
+            self.chart.scene().sigMouseMoved, rateLimit=20,
             slot=self._on_mouse_moved)
         self._mouse_proxy = proxy  # prevent GC
+        self._xhair_last_scene_pos = None
+        self._xhair_last_text = ""
 
         # Current price line & label
         self._price_line = pg.InfiniteLine(
@@ -985,6 +997,11 @@ class Dashboard(QMainWindow):
         pos = args[0]
         if not self.chart.sceneBoundingRect().contains(pos):
             return
+        # Skip if mouse hasn't moved by at least 1 scene pixel.
+        last = self._xhair_last_scene_pos
+        if last is not None and abs(pos.x() - last.x()) < 1 and abs(pos.y() - last.y()) < 1:
+            return
+        self._xhair_last_scene_pos = pos
         pt = self.chart.plotItem.vb.mapSceneToView(pos)
         self._xhair_v.setPos(pt.x())
         self._xhair_h.setPos(pt.y())
@@ -997,7 +1014,9 @@ class Dashboard(QMainWindow):
             txt = f"${price:.8f}"
         dt = datetime.fromtimestamp(pt.x())
         txt += f"  {dt:%H:%M}"
-        self._xhair_label.setText(txt)
+        if txt != self._xhair_last_text:
+            self._xhair_label.setText(txt)
+            self._xhair_last_text = txt
         self._xhair_label.setPos(pt.x(), pt.y())
 
     # ── Coin info header ────────────────────────────────────────────────────
