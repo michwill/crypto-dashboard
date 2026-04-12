@@ -72,7 +72,10 @@ class CandlestickItem(pg.GraphicsObject):
 
     def set_data(self, data):
         """Set OHLC data as an Nx5 numpy array [time, open, high, low, close]."""
-        self._data = data if len(data) > 0 else np.empty((0, 5))
+        if len(data) > 0:
+            self._data = data[:, :5]
+        else:
+            self._data = np.empty((0, 5))
         self._picture = None
         self.prepareGeometryChange()
         self.informViewBoundsChanged()
@@ -133,6 +136,66 @@ class CandlestickItem(pg.GraphicsObject):
             bar_w = 60
         return QRectF(xmin - bar_w, ymin - margin,
                       (xmax - xmin) + 2 * bar_w, (ymax - ymin) + 2 * margin)
+
+
+# ── Volume Graphics Item ───────────────────────────────────────────────────
+
+class VolumeItem(pg.GraphicsObject):
+    """Translucent volume bars coloured by candle direction (bull/bear)."""
+
+    def __init__(self):
+        super().__init__()
+        self._data = np.empty((0, 6))  # same Nx6 OHLCV as Dashboard._ohlc
+        self._picture = None
+
+    def set_data(self, data):
+        self._data = data if len(data) > 0 else np.empty((0, 6))
+        self._picture = None
+        self.prepareGeometryChange()
+        self.informViewBoundsChanged()
+        self.update()
+
+    def _generate_picture(self):
+        self._picture = QPicture()
+        p = QPainter(self._picture)
+        data = self._data
+        n = len(data)
+        if n == 0:
+            p.end()
+            return
+
+        w = (data[1, 0] - data[0, 0]) * 0.4 if n >= 2 else 30.0
+        bull = QColor("#a6e3a1")
+        bull.setAlpha(110)
+        bear = QColor("#f38ba8")
+        bear.setAlpha(110)
+        bull_brush = pg.mkBrush(bull)
+        bear_brush = pg.mkBrush(bear)
+        p.setPen(Qt.PenStyle.NoPen)
+
+        for i in range(n):
+            t, o, _h, _l, c, v = data[i]
+            p.setBrush(bull_brush if c >= o else bear_brush)
+            p.drawRect(QRectF(t - w, 0.0, w * 2, v))
+
+        p.end()
+
+    def paint(self, painter, option, widget):
+        if self._picture is None:
+            self._generate_picture()
+        self._picture.play(painter)
+
+    def boundingRect(self):
+        if len(self._data) == 0:
+            return QRectF()
+        xmin, xmax = self._data[0, 0], self._data[-1, 0]
+        vmax = float(self._data[:, 5].max()) or 1.0
+        if len(self._data) >= 2:
+            bar_w = self._data[1, 0] - self._data[0, 0]
+        else:
+            bar_w = 60
+        return QRectF(xmin - bar_w, 0.0,
+                      (xmax - xmin) + 2 * bar_w, vmax)
 
 
 # ── Qt Signals ──────────────────────────────────────────────────────────────
@@ -257,6 +320,7 @@ class BinanceWS(threading.Thread):
                 "h": float(k["h"]),
                 "l": float(k["l"]),
                 "c": float(k["c"]),
+                "v": float(k["v"]),
                 "closed": k["x"],
             })
 
@@ -440,7 +504,7 @@ class Dashboard(QMainWindow):
         self.coins = self._load_coins()
         self._active_coin = self.coins[0]
         self._active_interval = "1h"
-        self._ohlc = np.empty((0, 5))
+        self._ohlc = np.empty((0, 6))
         self._ticker_cache = {}          # symbol -> latest ticker dict
         self._current_price = None
 
@@ -530,6 +594,24 @@ class Dashboard(QMainWindow):
 
         self._candle_item = CandlestickItem()
         self.chart.addItem(self._candle_item)
+
+        # Volume overlay — separate ViewBox sharing X with the price plot,
+        # with its own Y scaled so bars occupy the bottom ~20% of the chart.
+        self._vol_vb = pg.ViewBox(enableMenu=False)
+        self._vol_vb.setMouseEnabled(x=False, y=False)
+        self._vol_vb.setZValue(-1000)
+        self.chart.plotItem.scene().addItem(self._vol_vb)
+        self._vol_vb.setXLink(self.chart.plotItem.vb)
+        self._volume_item = VolumeItem()
+        self._vol_vb.addItem(self._volume_item)
+
+        def _sync_vol_geom():
+            self._vol_vb.setGeometry(
+                self.chart.plotItem.vb.sceneBoundingRect())
+            self._vol_vb.linkedViewChanged(
+                self.chart.plotItem.vb, self._vol_vb.XAxis)
+        _sync_vol_geom()
+        self.chart.plotItem.vb.sigResized.connect(_sync_vol_geom)
 
         # Crosshair
         dash = Qt.PenStyle.DashLine
@@ -679,7 +761,7 @@ class Dashboard(QMainWindow):
                 raw = resp.json()
                 data = np.array([
                     [float(k[0]) / 1000, float(k[1]), float(k[2]),
-                     float(k[3]), float(k[4])]
+                     float(k[3]), float(k[4]), float(k[5])]
                     for k in raw
                 ])
                 self.signals.candles_loaded.emit(symbol, interval, data)
@@ -694,6 +776,8 @@ class Dashboard(QMainWindow):
             return
         self._ohlc = data
         self._candle_item.set_data(data)
+        self._volume_item.set_data(data)
+        self._rescale_volume()
         self.chart.enableAutoRange()
         if len(data) > 0:
             self._update_price_line(float(data[-1, 4]))
@@ -702,9 +786,10 @@ class Dashboard(QMainWindow):
         if symbol != self._active_coin:
             return
         t = kline["t"]
-        row = np.array([t, kline["o"], kline["h"], kline["l"], kline["c"]])
+        row = np.array([t, kline["o"], kline["h"], kline["l"],
+                        kline["c"], kline.get("v", 0.0)])
         if len(self._ohlc) == 0:
-            self._ohlc = row.reshape(1, 5)
+            self._ohlc = row.reshape(1, 6)
         elif self._ohlc[-1, 0] == t:
             self._ohlc[-1] = row
         else:
@@ -712,6 +797,8 @@ class Dashboard(QMainWindow):
             if len(self._ohlc) > CANDLE_LIMIT:
                 self._ohlc = self._ohlc[1:]
         self._candle_item.set_data(self._ohlc)
+        self._volume_item.set_data(self._ohlc)
+        self._rescale_volume()
         self._update_price_line(float(kline["c"]))
 
     def _on_ticker(self, symbol, data):
@@ -857,6 +944,17 @@ class Dashboard(QMainWindow):
         self._save_coins()
         if self._active_coin == symbol:
             self._switch_chart(symbol=self.coins[0])
+
+    # ── Volume overlay ──────────────────────────────────────────────────────
+
+    def _rescale_volume(self):
+        if len(self._ohlc) == 0:
+            return
+        vmax = float(self._ohlc[:, 5].max())
+        if vmax <= 0:
+            vmax = 1.0
+        # Bars occupy ~20% of the chart height.
+        self._vol_vb.setYRange(0.0, vmax * 5.0, padding=0)
 
     # ── Current price line ──────────────────────────────────────────────────
 
