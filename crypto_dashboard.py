@@ -29,12 +29,17 @@ import numpy as np
 import pyqtgraph as pg
 import requests
 import websocket
-from PyQt6.QtCore import QPointF, QRectF, QSize, QTimer, Qt, pyqtSignal, QObject
-from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPicture, QPixmap
+from PyQt6.QtCore import (
+    QEvent, QPointF, QRect, QRectF, QSize, QTimer, Qt, pyqtSignal, QObject,
+)
+from PyQt6.QtGui import (
+    QColor, QFont, QFontMetrics, QIcon, QPainter, QPen, QPicture, QPixmap,
+    QRegion,
+)
 from PyQt6.QtWidgets import (
-    QApplication, QComboBox, QHBoxLayout, QHeaderView, QInputDialog,
-    QLabel, QMainWindow, QMenu, QMessageBox, QPushButton, QSplitter,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QApplication, QComboBox, QGraphicsItem, QHBoxLayout, QHeaderView,
+    QInputDialog, QLabel, QMainWindow, QMenu, QMessageBox, QPushButton,
+    QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 # ── Configuration ───────────────────────────────────────────────────────────
@@ -196,6 +201,92 @@ class VolumeItem(pg.GraphicsObject):
             bar_w = 60
         return QRectF(xmin - bar_w, 0.0,
                       (xmax - xmin) + 2 * bar_w, vmax)
+
+
+# ── Crosshair Overlay ──────────────────────────────────────────────────────
+
+class CrosshairOverlay(QWidget):
+    """Transparent overlay that paints a crosshair without touching the
+    underlying QGraphicsScene. Mouse moves only repaint two narrow strips on
+    this widget — the chart's scene is never marked dirty."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._x = -1
+        self._y = -1
+        self._text = ""
+        self._active = False
+        self._pen = QPen(QColor("#585b70"))
+        self._pen.setWidth(1)
+        self._pen.setStyle(Qt.PenStyle.DashLine)
+        self._font = QFont("monospace", 9)
+        self._fm = QFontMetrics(self._font)
+        self._text_color = QColor("#cdd6f4")
+        self._bg_color = QColor(30, 30, 46, 220)
+
+    def set_position(self, x, y, text):
+        if (self._active and x == self._x and y == self._y
+                and text == self._text):
+            return
+        region = self._dirty_region()
+        self._x = x
+        self._y = y
+        self._text = text
+        self._active = True
+        region = region.united(self._dirty_region())
+        self.update(region)
+
+    def clear(self):
+        if not self._active:
+            return
+        region = self._dirty_region()
+        self._active = False
+        self.update(region)
+
+    def _dirty_region(self):
+        if not self._active or self._x < 0:
+            return QRegion()
+        w = self.width()
+        h = self.height()
+        region = QRegion(self._x - 1, 0, 3, h)
+        region += QRegion(0, self._y - 1, w, 3)
+        if self._text:
+            tw = self._fm.horizontalAdvance(self._text)
+            th = self._fm.height()
+            tx = self._x + 6
+            ty = self._y - 6 - th
+            if tx + tw + 4 > w:
+                tx = self._x - 6 - tw
+            if ty < 0:
+                ty = self._y + 6
+            region += QRegion(tx - 3, ty - 1, tw + 6, th + 2)
+        return region
+
+    def paintEvent(self, ev):
+        if not self._active or self._x < 0:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        p.setPen(self._pen)
+        p.drawLine(self._x, 0, self._x, self.height())
+        p.drawLine(0, self._y, self.width(), self._y)
+        if self._text:
+            p.setFont(self._font)
+            tw = self._fm.horizontalAdvance(self._text)
+            th = self._fm.height()
+            asc = self._fm.ascent()
+            tx = self._x + 6
+            ty = self._y - 6 - th
+            if tx + tw + 4 > self.width():
+                tx = self._x - 6 - tw
+            if ty < 0:
+                ty = self._y + 6
+            p.fillRect(QRect(tx - 3, ty - 1, tw + 6, th + 2), self._bg_color)
+            p.setPen(self._text_color)
+            p.drawText(tx, ty + asc, self._text)
 
 
 # ── Qt Signals ──────────────────────────────────────────────────────────────
@@ -593,6 +684,8 @@ class Dashboard(QMainWindow):
         self.chart.getAxis("bottom").setPen(pg.mkPen("#585b70"))
 
         self._candle_item = CandlestickItem()
+        self._candle_item.setCacheMode(
+            QGraphicsItem.CacheMode.DeviceCoordinateCache)
         self.chart.addItem(self._candle_item)
 
         # Volume overlay — separate ViewBox sharing X with the price plot,
@@ -603,6 +696,8 @@ class Dashboard(QMainWindow):
         self.chart.plotItem.scene().addItem(self._vol_vb)
         self._vol_vb.setXLink(self.chart.plotItem.vb)
         self._volume_item = VolumeItem()
+        self._volume_item.setCacheMode(
+            QGraphicsItem.CacheMode.DeviceCoordinateCache)
         self._vol_vb.addItem(self._volume_item)
 
         def _sync_vol_geom():
@@ -613,21 +708,19 @@ class Dashboard(QMainWindow):
         _sync_vol_geom()
         self.chart.plotItem.vb.sigResized.connect(_sync_vol_geom)
 
-        # Crosshair
-        dash = Qt.PenStyle.DashLine
-        self._xhair_v = pg.InfiniteLine(
-            angle=90, movable=False, pen=pg.mkPen("#585b70", width=1, style=dash))
-        self._xhair_h = pg.InfiniteLine(
-            angle=0, movable=False, pen=pg.mkPen("#585b70", width=1, style=dash))
-        self.chart.addItem(self._xhair_v, ignoreBounds=True)
-        self.chart.addItem(self._xhair_h, ignoreBounds=True)
-        self._xhair_label = pg.TextItem(color="#cdd6f4", anchor=(0, 1))
-        self._xhair_label.setFont(QFont("monospace", 9))
-        self.chart.addItem(self._xhair_label, ignoreBounds=True)
-        proxy = pg.SignalProxy(
-            self.chart.scene().sigMouseMoved, rateLimit=30,
-            slot=self._on_mouse_moved)
-        self._mouse_proxy = proxy  # prevent GC
+        # Crosshair — drawn on a transparent overlay widget so mouse moves
+        # only repaint two narrow strips on the overlay; the chart's scene
+        # (candles, volume, axes) is never marked dirty.
+        self._xhair_overlay = CrosshairOverlay(self.chart.viewport())
+        self._xhair_overlay.resize(self.chart.viewport().size())
+        self._xhair_overlay.show()
+        self._xhair_overlay.raise_()
+        # Throttle hover mouse-moves at the source so pyqtgraph's scene
+        # doesn't run hit-testing/hover dispatch at the OS mouse rate.
+        self._last_hover_time = 0.0
+        self._hover_min_interval = 1.0 / 30.0
+        self.chart.viewport().installEventFilter(self)
+        self.chart.scene().sigMouseMoved.connect(self._on_mouse_moved)
 
         # Current price line & label
         self._price_line = pg.InfiniteLine(
@@ -981,24 +1074,38 @@ class Dashboard(QMainWindow):
 
     # ── Crosshair ───────────────────────────────────────────────────────────
 
-    def _on_mouse_moved(self, args):
-        pos = args[0]
-        if not self.chart.sceneBoundingRect().contains(pos):
+    def _on_mouse_moved(self, pos):
+        vb = self.chart.plotItem.vb
+        if not vb.sceneBoundingRect().contains(pos):
+            self._xhair_overlay.clear()
             return
-        pt = self.chart.plotItem.vb.mapSceneToView(pos)
-        self._xhair_v.setPos(pt.x())
-        self._xhair_h.setPos(pt.y())
-        price = pt.y()
+        view_pt = vb.mapSceneToView(pos)
+        vp_pt = self.chart.mapFromScene(pos)
+        price = view_pt.y()
         if price >= 1:
             txt = f"${price:,.2f}"
         elif price >= 0.01:
             txt = f"${price:.4f}"
         else:
             txt = f"${price:.8f}"
-        dt = datetime.fromtimestamp(pt.x())
+        dt = datetime.fromtimestamp(view_pt.x())
         txt += f"  {dt:%H:%M}"
-        self._xhair_label.setText(txt)
-        self._xhair_label.setPos(pt.x(), pt.y())
+        self._xhair_overlay.set_position(vp_pt.x(), vp_pt.y(), txt)
+
+    def eventFilter(self, obj, ev):
+        if obj is self.chart.viewport():
+            t = ev.type()
+            if t == QEvent.Type.MouseMove:
+                if not ev.buttons():
+                    now = time.monotonic()
+                    if now - self._last_hover_time < self._hover_min_interval:
+                        return True  # drop — never reaches pyqtgraph's scene
+                    self._last_hover_time = now
+            elif t == QEvent.Type.Resize:
+                self._xhair_overlay.resize(ev.size())
+            elif t == QEvent.Type.Leave:
+                self._xhair_overlay.clear()
+        return super().eventFilter(obj, ev)
 
     # ── Coin info header ────────────────────────────────────────────────────
 
