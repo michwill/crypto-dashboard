@@ -673,7 +673,10 @@ class Dashboard(QMainWindow):
         # ── Splitter: chart + table ──
         splitter = QSplitter(Qt.Orientation.Vertical)
 
-        # Chart
+        # Chart — GPU-accelerated viewport so the parent repaint under the
+        # crosshair overlay's dirty strips is a fast GL blit instead of a
+        # software QPainter pass.
+        pg.setConfigOptions(useOpenGL=True, antialias=False)
         date_axis = pg.DateAxisItem()
         self.chart = pg.PlotWidget(
             axisItems={"bottom": date_axis}, background="#1e1e2e")
