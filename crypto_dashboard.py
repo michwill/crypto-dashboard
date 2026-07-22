@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.10"
-# dependencies = [
-#     "PyQt6",
-#     "pyqtgraph",
-#     "requests",
-#     "websocket-client",
-#     "numpy",
-#     "platformdirs",
-# ]
-# ///
+#
+# Crypto Dashboard — real-time cryptocurrency dashboard with candlestick charts.
+# Copyright (C) 2026 Michael Egorov
+#
+# This program is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later
+# version.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program. If not, see <https://www.gnu.org/licenses/>.
 """Real-time cryptocurrency dashboard with candlestick charts."""
+
+__version__ = "1.0"
 
 import json
 import os
@@ -63,6 +69,24 @@ REST_URL = "https://api.binance.com/api/v3"
 CONFIG_DIR = Path(platformdirs.user_config_dir("crypto-dashboard"))
 CONFIG_FILE = CONFIG_DIR / "coins.json"
 ICON_CACHE_DIR = Path(platformdirs.user_cache_dir("crypto-dashboard")) / "icons"
+
+# App icon. When installed as a distro package it lives in the hicolor icon
+# theme and is found via QIcon.fromTheme; this path is the source-checkout
+# fallback for running straight from the repo.
+ICON_NAME = "crypto-dashboard"
+APP_ICON_FILE = (Path(__file__).resolve().parent
+                 / "data" / "icons" / "hicolor" / "scalable" / "apps"
+                 / f"{ICON_NAME}.svg")
+
+
+def app_icon():
+    """Resolve the application icon across install layouts."""
+    themed = QIcon.fromTheme(ICON_NAME)
+    if not themed.isNull():
+        return themed
+    if APP_ICON_FILE.exists():
+        return QIcon(str(APP_ICON_FILE))
+    return QIcon()
 
 
 # ── Candlestick Graphics Item ──────────────────────────────────────────────
@@ -590,6 +614,7 @@ class Dashboard(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Crypto Dashboard")
+        self.setWindowIcon(app_icon())
         self.resize(1400, 850)
 
         self.coins = self._load_coins()
@@ -1145,7 +1170,7 @@ class Dashboard(QMainWindow):
         pts = len(self._ohlc)
         self.status_label.setText(
             f"  {now}  |  {n} coins  |  {sym}/USDT {iv}  |  "
-            f"{pts} candles  |  Binance")
+            f"{pts} candles  |  Binance  |  v{__version__}")
 
     # ── Persistence ─────────────────────────────────────────────────────────
 
@@ -1168,6 +1193,12 @@ class Dashboard(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    app.setApplicationName("Crypto Dashboard")
+    app.setApplicationDisplayName("Crypto Dashboard")
+    app.setApplicationVersion(__version__)
+    # Match the installed .desktop file so Wayland/GNOME shows the right icon.
+    app.setDesktopFileName("crypto-dashboard")
+    app.setWindowIcon(app_icon())
     app.setStyle("Fusion")
 
     # Global dark palette

@@ -1,2 +1,12 @@
 #!/bin/sh
-exec uv run "$(dirname "$0")/crypto_dashboard.py" "$@"
+# Launch Crypto Dashboard via uv.
+#
+# The project environment is created with --system-site-packages so that the
+# system PyQt6 (built against your desktop's Qt) is used instead of a PyPI
+# wheel. uv manages the remaining pure-Python dependencies. If you don't have
+# a system PyQt6, run `uv sync --extra pyqt` once to pull it from PyPI.
+set -e
+DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$DIR"
+[ -d .venv ] || uv venv --system-site-packages
+exec uv run crypto-dashboard "$@"

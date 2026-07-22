@@ -15,25 +15,38 @@ Real-time cryptocurrency dashboard built with Python and Qt. Features candlestic
 
 ## Quick Start
 
-Requires [uv](https://docs.astral.sh/uv/):
+Requires [uv](https://docs.astral.sh/uv/) and a system **PyQt6** (e.g. the
+`python-pyqt6` package on most distros):
 
 ```sh
 ./crypto-dashboard
 ```
 
-Or run directly:
+The launcher creates a project environment with `--system-site-packages` so the
+system PyQt6 is reused, and lets uv manage the remaining pure-Python
+dependencies. To set things up manually:
 
 ```sh
-uv run crypto_dashboard.py
+uv venv --system-site-packages
+uv run crypto-dashboard
 ```
 
-## Alternative Setup
+### No system PyQt6?
+
+Pull it from PyPI instead of using the system build:
 
 ```sh
-python -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/python crypto_dashboard.py
+uv sync --extra pyqt
+uv run crypto-dashboard
 ```
+
+## Building a Package
+
+```sh
+uv build            # wheel + sdist in dist/
+```
+
+The version is defined once by `__version__` in `crypto_dashboard.py`.
 
 ## Usage
 
@@ -43,13 +56,48 @@ python -m venv .venv
 - **Remove a coin**: right-click a table row
 - **Zoom/pan**: scroll wheel and drag on the chart; right-click > View All to reset
 
-## Desktop Shortcut (Linux)
+## Desktop Shortcut (from a source checkout)
 
 ```sh
 ./install-desktop.sh
 ```
 
-This creates a `.desktop` entry so the app appears in your application launcher under **Finance**.
+This installs a user-level `.desktop` entry and icon so the app appears in your
+application launcher. It's a dev convenience for running from a git clone —
+distribution packages install these into system paths instead (see below).
+
+## Packaging for distributions
+
+The project builds as a standard PEP 517 wheel (hatchling backend), so it slots
+into deb / rpm / ebuild workflows via each distro's Python macros
+(`dh_python3`/`pybuild`, `%pyproject_*`, `distutils-r1` with
+`DISTUTILS_USE_PEP517=hatchling`).
+
+**Runtime dependencies** — map these to the distro's own packages (do **not**
+vendor them via pip):
+
+| Import            | Typical package name              |
+|-------------------|-----------------------------------|
+| PyQt6             | `python3-pyqt6` / `dev-python/PyQt6` |
+| pyqtgraph         | `python3-pyqtgraph`               |
+| numpy             | `python3-numpy`                   |
+| requests          | `python3-requests`                |
+| websocket-client  | `python3-websocket-client`        |
+| platformdirs      | `python3-platformdirs`            |
+
+PyQt6 is intentionally absent from `[project.dependencies]` (it's expected from
+the system); declare it as a package dependency in your spec/ebuild/control.
+
+**Data files** — install these from the source tree to standard locations:
+
+| Source                                              | Destination                                              |
+|-----------------------------------------------------|----------------------------------------------------------|
+| `data/crypto-dashboard.desktop`                     | `/usr/share/applications/`                               |
+| `data/icons/hicolor/scalable/apps/crypto-dashboard.svg` | `/usr/share/icons/hicolor/scalable/apps/`            |
+
+The wheel installs the module and a `crypto-dashboard` entry point
+(`/usr/bin/crypto-dashboard`). The `uv` launcher script and `install-desktop.sh`
+are dev tools and are **not** part of a distribution package.
 
 ## Data Sources
 

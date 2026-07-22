@@ -1,6 +1,0 @@
-PyQt6
-pyqtgraph
-requests
-websocket-client
-numpy
-platformdirs

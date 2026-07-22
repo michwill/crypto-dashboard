@@ -1,0 +1,67 @@
+[project]
+name = "crypto-dashboard"
+dynamic = ["version"]
+description = "Real-time cryptocurrency dashboard with candlestick charts"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Michael Egorov", email = "michwill@yieldbasis.com" }]
+keywords = ["crypto", "bitcoin", "trading", "chart", "binance", "qt"]
+# No license classifier by design: PEP 639 deprecates pairing a license
+# classifier with the SPDX `license` expression above.
+classifiers = [
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
+# NOTE: PyQt6 is intentionally NOT a managed dependency. It is provided by the
+# host system (e.g. the distro's `python-pyqt6` package) so the app uses the Qt
+# build that integrates with your desktop, and the multi-hundred-MB Qt wheel is
+# never downloaded. The project environment is created with
+# `--system-site-packages` (see the `crypto-dashboard` launcher) so that
+# `import PyQt6` resolves to the system build.
+#
+# If you do NOT have a system PyQt6, pull it from PyPI instead with the extra:
+#     uv sync --extra pyqt
+dependencies = [
+    "pyqtgraph",
+    "requests",
+    "websocket-client",
+    "numpy",
+    "platformdirs",
+]
+
+[project.optional-dependencies]
+# Fallback: install PyQt6 from PyPI when no system build is available.
+pyqt = ["PyQt6>=6.5"]
+
+[project.gui-scripts]
+crypto-dashboard = "crypto_dashboard:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Single source of truth for the version: `__version__` in crypto_dashboard.py.
+[tool.hatch.version]
+path = "crypto_dashboard.py"
+
+[tool.hatch.build.targets.wheel]
+# Ship only the Python module. Desktop integration files (the .desktop entry
+# and the hicolor icon under data/) are installed to system paths by the
+# distribution package, not dropped into site-packages. See "Packaging for
+# distributions" in the README.
+include = ["crypto_dashboard.py"]
+
+[tool.hatch.build.targets.sdist]
+# The source tarball carries everything a downstream packager needs.
+include = [
+    "crypto_dashboard.py",
+    "data/",
+    "README.md",
+    "install-desktop.sh",
+    "crypto-dashboard",
+]
