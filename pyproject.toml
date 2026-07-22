@@ -69,3 +69,10 @@ include = [
     "install-desktop.sh",
     "crypto-dashboard",
 ]
+
+# dist/ is hatchling's build-output dir and is excluded from the sdist by
+# default, so force-include the packaging recipes that live under it.
+[tool.hatch.build.targets.sdist.force-include]
+"dist/deb/build-deb.sh" = "dist/deb/build-deb.sh"
+"dist/deb/crypto-dashboard.launcher" = "dist/deb/crypto-dashboard.launcher"
+"dist/rpm/crypto-dashboard.spec" = "dist/rpm/crypto-dashboard.spec"
