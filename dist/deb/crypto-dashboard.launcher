@@ -1,0 +1,10 @@
+#!/bin/sh
+# crypto-dashboard launcher (Debian / Ubuntu / Mint build).
+#
+# The single application module lives in a private dir; every Python runtime
+# dependency (PyQt6, pyqtgraph, numpy, requests, websocket, platformdirs) is
+# provided by the distro's own python3-* packages via the .deb Depends, so
+# nothing is vendored. The app links the system Qt, so the user's Qt theme
+# applies natively.
+exec env PYTHONPATH="/usr/lib/crypto-dashboard${PYTHONPATH:+:$PYTHONPATH}" \
+     python3 -m crypto_dashboard "$@"

@@ -57,10 +57,14 @@ path = "crypto_dashboard.py"
 include = ["crypto_dashboard.py"]
 
 [tool.hatch.build.targets.sdist]
-# The source tarball carries everything a downstream packager needs.
+# The source tarball carries everything a downstream packager needs, including
+# the distro packaging recipes under dist/ (the RPM spec and the .deb builder).
 include = [
     "crypto_dashboard.py",
     "data/",
+    "dist/deb/build-deb.sh",
+    "dist/deb/crypto-dashboard.launcher",
+    "dist/rpm/crypto-dashboard.spec",
     "README.md",
     "install-desktop.sh",
     "crypto-dashboard",

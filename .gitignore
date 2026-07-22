@@ -3,7 +3,10 @@ __pycache__/
 *.pyc
 coins.json
 
-# Build artifacts
-/dist/
+# Build artifacts — keep the packaging recipes under dist/, ignore the outputs.
+/dist/*.tar.gz
+/dist/*.whl
+/dist/deb/*.deb
+/dist/rpm/*.rpm
 /build/
 *.egg-info/
