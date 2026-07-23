@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# crypto-dashboard AppImage entrypoint. The AppImage runtime already exported
+# $APPDIR and $APPIMAGE.
+set -euo pipefail
+HERE="$(dirname "$(readlink -f "$0")")"
+
+export PYTHONHOME="$HERE/usr/python"
+export PYTHONNOUSERSITE=1   # ignore ~/.local site-packages — stay self-contained
+
+# The xcb plugin's bundled system deps (libxcb-cursor, libxkbcommon, …) live here.
+export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# Pin the Qt plugin dirs so the xcb platform + xcbglintegrations (OpenGL chart)
+# + imageformats/qsvg (SVG icon) plugins are always found.
+for _q in "$HERE"/usr/python/lib/python3.*/site-packages/PyQt6/Qt6/plugins; do
+    [ -d "$_q" ] && export QT_PLUGIN_PATH="$_q" \
+                 && export QT_QPA_PLATFORM_PLUGIN_PATH="$_q/platforms" && break
+done
+
+# So QIcon.fromTheme("crypto-dashboard") resolves and the WM shows the icon.
+export XDG_DATA_DIRS="$HERE/usr/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
+
+# The Binance wss:// stream uses stdlib ssl; the bundled OpenSSL's baked-in CA
+# path is absent on targets, so point it at certifi's bundle (from requests).
+for _c in "$HERE"/usr/python/lib/python3.*/site-packages/certifi/cacert.pem; do
+    [ -f "$_c" ] && export SSL_CERT_FILE="$_c" && export REQUESTS_CA_BUNDLE="$_c" && break
+done
+
+# GL (pyqtgraph useOpenGL=True) intentionally uses the HOST's libGL — we do not
+# bundle mesa, so the host's GPU driver is used.
+exec "$HERE/usr/python/bin/python3" -m crypto_dashboard "$@"

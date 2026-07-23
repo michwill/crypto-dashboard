@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Crypto Dashboard
+GenericName=Crypto Dashboard
+Comment=Real-time cryptocurrency dashboard with candlestick charts
+Exec=AppRun
+Icon=crypto-dashboard
+Terminal=false
+Categories=Office;Finance;
+Keywords=crypto;bitcoin;trading;chart;
+StartupWMClass=crypto-dashboard
