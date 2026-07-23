@@ -1197,7 +1197,9 @@ def main():
     app.setApplicationDisplayName("Crypto Dashboard")
     app.setApplicationVersion(__version__)
     # Match the installed .desktop file so Wayland/GNOME shows the right icon.
-    app.setDesktopFileName("crypto-dashboard")
+    # Inside a Flatpak sandbox the exported desktop file is named after the
+    # app-id (FLATPAK_ID); everywhere else it's "crypto-dashboard".
+    app.setDesktopFileName(os.environ.get("FLATPAK_ID", "crypto-dashboard"))
     app.setWindowIcon(app_icon())
     app.setStyle("Fusion")
 

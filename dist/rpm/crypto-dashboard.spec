@@ -7,7 +7,7 @@ Summary:        Real-time cryptocurrency dashboard with candlestick charts
 
 License:        GPL-3.0-or-later
 URL:            https://github.com/michwill/crypto-dashboard
-# hatchling sdist from `uv build --sdist`  ->  crypto_dashboard-%{version}.tar.gz
+# hatchling sdist from `uv build --sdist` (the crypto_dashboard-VERSION tarball)
 Source0:        %{srcname}-%{version}.tar.gz
 
 # Pure Python and arch-independent: the compiled bits (PyQt6, numpy) come from
@@ -66,6 +66,8 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/crypto-dashboard.desk
 %files -f %{pyproject_files}
 %license LICENSE
 %doc README.md
+# The gui-scripts entry point is not auto-captured, so list it explicitly.
+%{_bindir}/crypto-dashboard
 %{_datadir}/applications/crypto-dashboard.desktop
 %{_datadir}/icons/hicolor/scalable/apps/crypto-dashboard.svg
 

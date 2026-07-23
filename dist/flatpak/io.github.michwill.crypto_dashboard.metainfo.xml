@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.michwill.crypto_dashboard</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Crypto Dashboard</name>
+  <summary>Real-time cryptocurrency dashboard with candlestick charts</summary>
+  <description>
+    <p>
+      Crypto Dashboard is a Qt (PyQt6) desktop app that streams live prices from
+      Binance and draws real-time candlestick charts with a volume overlay,
+      multiple timeframes, a live ticker table and a saved coin watchlist.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.michwill.crypto_dashboard.desktop</launchable>
+  <provides>
+    <binary>crypto-dashboard</binary>
+  </provides>
+  <categories>
+    <category>Office</category>
+    <category>Finance</category>
+  </categories>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/michwill/crypto-dashboard/v1.0/screenshot.png</image>
+      <caption>Live BTC/USDT candlesticks with a volume overlay and ticker table</caption>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/michwill/crypto-dashboard</url>
+  <url type="bugtracker">https://github.com/michwill/crypto-dashboard/issues</url>
+  <developer id="io.github.michwill">
+    <name>Michael Egorov</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.0" date="2026-07-23"/>
+  </releases>
+</component>

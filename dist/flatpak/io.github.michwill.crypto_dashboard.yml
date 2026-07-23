@@ -1,0 +1,78 @@
+# crypto-dashboard Flatpak — self-distributed single-file bundle
+# (NOT a Flathub submission).
+#
+# Minimal / vendor-nothing-Qt design, mirroring qeth: Qt6 comes from the
+# org.kde.Platform runtime and the PyQt6 bindings come prebuilt from
+# com.riverbankcomputing.PyQt.BaseApp (built against that same runtime Qt) — so
+# NO copy of Qt is bundled. The only things installed into the app are the app
+# module itself and its small non-Qt Python deps (pyqtgraph, numpy, requests,
+# websocket-client, platformdirs); PyQt6 is deliberately NOT pip-installed (that
+# would pull the ~300 MB bundled-Qt PyQt6 wheel).
+#
+# Build the single-file bundle (from the repo root):
+#   flatpak-builder --user --force-clean \
+#       --repo=~/.cache/crypto-dashboard-flatpak/repo \
+#       --state-dir ~/.cache/crypto-dashboard-flatpak/state \
+#       ~/.cache/crypto-dashboard-flatpak/build \
+#       dist/flatpak/io.github.michwill.crypto_dashboard.yml
+#   flatpak build-bundle ~/.cache/crypto-dashboard-flatpak/repo \
+#       dist/flatpak/crypto-dashboard-1.0.flatpak io.github.michwill.crypto_dashboard
+#
+# Prereqs (from flathub): org.kde.Platform//6.10, org.kde.Sdk//6.10,
+#   com.riverbankcomputing.PyQt.BaseApp//6.10
+id: io.github.michwill.crypto_dashboard
+runtime: org.kde.Platform
+runtime-version: "6.10"
+sdk: org.kde.Sdk
+base: com.riverbankcomputing.PyQt.BaseApp
+base-version: "6.10"
+command: crypto-dashboard
+
+finish-args:
+  - --share=network             # Binance REST (api.binance.com) + websocket stream
+  - --share=ipc                 # X11 MIT-SHM
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri                # OpenGL for pyqtgraph (useOpenGL=True)
+
+cleanup-commands:
+  # Strip the BaseApp's build tooling, PyQt bindings source, translations, and
+  # the unused QtWebEngine/Chromium (~200+ MB) that PyQt6 ships but this app
+  # never touches.
+  - BASEAPP_REMOVE_WEBENGINE=1 /app/cleanup-BaseApp.sh
+  # Drop never-imported test/example trees from the vendored deps.
+  - rm -rfv /app/lib/python3.13/site-packages/pyqtgraph/examples
+  - rm -rfv /app/lib/python3.13/site-packages/pyqtgraph/tests
+  - find /app/lib/python3.13/site-packages/numpy -depth -type d -name tests -exec rm -rf {} +
+
+modules:
+  - name: crypto-dashboard
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network       # local build → pip may fetch from PyPI
+    build-commands:
+      # PyQt6 + Qt come from the BaseApp/runtime, so install ONLY the app + its
+      # non-Qt deps (pyqtgraph, numpy, requests, websocket-client, platformdirs).
+      # Plain `.` (no [pyqt] extra) keeps PyQt6 out of the install.
+      - pip3 install --prefix=${FLATPAK_DEST} --break-system-packages --no-warn-script-location .
+      - install -Dm644 dist/flatpak/io.github.michwill.crypto_dashboard.desktop
+          ${FLATPAK_DEST}/share/applications/io.github.michwill.crypto_dashboard.desktop
+      - install -Dm644 data/icons/hicolor/scalable/apps/crypto-dashboard.svg
+          ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/io.github.michwill.crypto_dashboard.svg
+      # Second copy under the theme name the app asks for at runtime
+      # (QIcon.fromTheme("crypto-dashboard") in crypto_dashboard.py).
+      - install -Dm644 data/icons/hicolor/scalable/apps/crypto-dashboard.svg
+          ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/crypto-dashboard.svg
+      - install -Dm644 dist/flatpak/io.github.michwill.crypto_dashboard.metainfo.xml
+          ${FLATPAK_DEST}/share/metainfo/io.github.michwill.crypto_dashboard.metainfo.xml
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .venv
+          - .git
+          - __pycache__
+          - .claude
+          - dist/release
+          - dist/appimage/out
