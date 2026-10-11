@@ -1,7 +1,7 @@
 %global srcname crypto_dashboard
 
 Name:           crypto-dashboard
-Version:        1.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        Real-time cryptocurrency dashboard with candlestick charts
 
@@ -72,5 +72,8 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/crypto-dashboard.desk
 %{_datadir}/icons/hicolor/scalable/apps/crypto-dashboard.svg
 
 %changelog
+* Sun Oct 11 2026 Michael Egorov <michwill@yieldbasis.com> - 1.0.1-1
+- Update to 1.0.1: refreshed dependency lock.
+
 * Thu Jul 23 2026 Michael Egorov <michwill@yieldbasis.com> - 1.0-1
 - Initial Fedora package.

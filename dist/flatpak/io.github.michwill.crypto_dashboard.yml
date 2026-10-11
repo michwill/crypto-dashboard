@@ -16,7 +16,7 @@
 #       ~/.cache/crypto-dashboard-flatpak/build \
 #       dist/flatpak/io.github.michwill.crypto_dashboard.yml
 #   flatpak build-bundle ~/.cache/crypto-dashboard-flatpak/repo \
-#       dist/flatpak/crypto-dashboard-1.0.flatpak io.github.michwill.crypto_dashboard
+#       dist/flatpak/crypto-dashboard-1.0.1.flatpak io.github.michwill.crypto_dashboard
 #
 # Prereqs (from flathub): org.kde.Platform//6.10, org.kde.Sdk//6.10,
 #   com.riverbankcomputing.PyQt.BaseApp//6.10

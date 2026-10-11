@@ -16,7 +16,7 @@
 # this program. If not, see <https://www.gnu.org/licenses/>.
 """Real-time cryptocurrency dashboard with candlestick charts."""
 
-__version__ = "1.0"
+__version__ = "1.0.1"
 
 import json
 import os
